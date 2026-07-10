@@ -1,0 +1,46 @@
+{
+  "name": "小小時間偵探",
+  "short_name": "時間偵探",
+  "description": "低年級兒童日曆與月曆互動學習工具",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4fbff",
+  "theme_color": "#0e7490",
+  "orientation": "portrait-primary",
+  "lang": "zh-Hant-TW",
+  "categories": ["education", "kids", "games"],
+  "icons": [
+    {
+      "src": "icons/calendar-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "開始練習",
+      "short_name": "練習",
+      "url": "./",
+      "icons": [
+        {
+          "src": "icons/app-icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
