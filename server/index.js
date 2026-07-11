@@ -1,5 +1,8 @@
 const INDEX_PATH = '/index.html';
 const SESSION_DAYS = 180;
+const CURRENT_PIN_ITERATIONS = 10000;
+const LEGACY_PIN_ITERATIONS = 120000;
+const PIN_HASH_PREFIX = 'pbkdf2-sha256';
 const ALLOWED_EXTERNAL_ORIGINS = new Set([
   'https://choyuanchang-cloud.github.io',
 ]);
@@ -52,6 +55,7 @@ async function handleApi(request, env, url) {
   }
   if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
     const auth = await requireChild(request, env);
+    if (auth instanceof Response) return auth;
     await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(auth.tokenHash).run();
     return json({ ok: true });
   }
@@ -76,6 +80,9 @@ async function handleApi(request, env, url) {
   if (url.pathname === '/api/records/reset' && request.method === 'POST') {
     return resetRecords(request, env, auth.child);
   }
+  if (url.pathname === '/api/account' && request.method === 'DELETE') {
+    return deleteAccount(env, auth.child);
+  }
   if (url.pathname === '/api/leaderboard' && request.method === 'GET') {
     return json({ leaderboard: await getLeaderboard(env, auth.child.id) });
   }
@@ -97,7 +104,7 @@ async function registerChild(request, env) {
 
   const id = crypto.randomUUID();
   const salt = randomToken(16);
-  const pinHash = await derivePinHash(body.pin, salt);
+  const pinHash = await createStoredPinHash(body.pin, salt);
   const now = new Date().toISOString();
   const avatarId = `avatar-${hashName(nameKey) % 8}`;
   const progressJson = normalizeProgressJson(body.progress);
@@ -119,7 +126,7 @@ async function loginChild(request, env) {
   const child = await env.DB.prepare('SELECT * FROM children WHERE name_key = ?')
     .bind(normalizeName(body.name))
     .first();
-  if (!child || !timingSafeEqual(child.pin_hash, await derivePinHash(body.pin, child.pin_salt))) {
+  if (!child || !(await verifyStoredPin(body.pin, child.pin_salt, child.pin_hash))) {
     return json({ error: '名字或數字密碼不正確。' }, 401);
   }
 
@@ -206,6 +213,17 @@ async function resetRecords(request, env, child) {
     env.DB.prepare('UPDATE children SET progress_json = ? WHERE id = ?').bind(progressJson, child.id),
   ]);
   return json(await buildRewardPayload(env, child.id, 0));
+}
+
+async function deleteAccount(env, child) {
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM sessions WHERE child_id = ?').bind(child.id),
+    env.DB.prepare('DELETE FROM attempts WHERE child_id = ?').bind(child.id),
+    env.DB.prepare('DELETE FROM point_transactions WHERE child_id = ?').bind(child.id),
+    env.DB.prepare('DELETE FROM child_stickers WHERE child_id = ?').bind(child.id),
+    env.DB.prepare('DELETE FROM children WHERE id = ?').bind(child.id),
+  ]);
+  return json({ ok: true });
 }
 
 async function buildSessionPayload(env, child, sessionToken) {
@@ -355,11 +373,27 @@ function hashName(value) {
   return Math.abs(hash);
 }
 
-async function derivePinHash(pin, salt) {
+export async function createStoredPinHash(pin, salt) {
+  const hash = await derivePinHash(pin, salt, CURRENT_PIN_ITERATIONS);
+  return `${PIN_HASH_PREFIX}:${CURRENT_PIN_ITERATIONS}:${hash}`;
+}
+
+export async function verifyStoredPin(pin, salt, storedHash) {
+  if (typeof storedHash !== 'string') return false;
+
+  const match = storedHash.match(/^pbkdf2-sha256:(\d+):([A-Za-z0-9_-]+)$/);
+  const iterations = match ? Number(match[1]) : LEGACY_PIN_ITERATIONS;
+  const expectedHash = match ? match[2] : storedHash;
+  if (!Number.isInteger(iterations) || iterations < 1000 || iterations > LEGACY_PIN_ITERATIONS) return false;
+
+  return timingSafeEqual(expectedHash, await derivePinHash(pin, salt, iterations));
+}
+
+async function derivePinHash(pin, salt, iterations) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey('raw', encoder.encode(pin), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: encoder.encode(salt), iterations: 120000 },
+    { name: 'PBKDF2', hash: 'SHA-256', salt: encoder.encode(salt), iterations },
     key,
     256,
   );
@@ -419,6 +453,6 @@ function withCors(request, response) {
   headers.set('access-control-allow-origin', origin);
   headers.set('vary', 'Origin');
   headers.set('access-control-allow-headers', 'Authorization, Content-Type');
-  headers.set('access-control-allow-methods', 'GET, POST, PUT, OPTIONS');
+  headers.set('access-control-allow-methods', 'GET, POST, PUT, DELETE, OPTIONS');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
