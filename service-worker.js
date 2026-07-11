@@ -1,4 +1,4 @@
-const CACHE_NAME = "month-date-calendar-learning-v3";
+const CACHE_NAME = "month-date-calendar-learning-v4";
 const CORE_ASSETS = [
   "./index.html",
   "./site.webmanifest",
@@ -35,8 +35,9 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
+  const requestUrl = new URL(request.url);
 
-  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) {
+  if (request.method !== "GET" || requestUrl.origin !== self.location.origin || requestUrl.pathname.includes("/api/")) {
     return;
   }
 

@@ -1,13 +1,13 @@
 {
   "name": "小小時間偵探",
   "short_name": "時間偵探",
-  "description": "低年級兒童日曆與月曆互動學習工具",
+  "description": "答題集點、收藏貼紙的兒童日曆與月曆互動學習遊戲",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f4fbff",
-  "theme_color": "#0e7490",
-  "orientation": "portrait-primary",
+  "background_color": "#eef9fb",
+  "theme_color": "#0891b2",
+  "orientation": "any",
   "lang": "zh-Hant-TW",
   "categories": ["education", "kids", "games"],
   "icons": [
