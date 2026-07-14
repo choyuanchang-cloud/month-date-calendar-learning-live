@@ -248,39 +248,34 @@ async function buildRewardPayload(env, childId, awarded) {
            COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END), 0) AS total_points
     FROM point_transactions WHERE child_id = ?
   `).bind(childId).first();
-  const weekStart = getWeekStart();
-  const weeklyRow = await env.DB.prepare(`
-    SELECT COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END), 0) AS weekly_points
-    FROM point_transactions WHERE child_id = ? AND created_at >= ?
-  `).bind(childId, weekStart).first();
+  const totalPoints = Number(totalRow?.total_points ?? 0);
 
   return {
     awarded,
     points: Number(totalRow?.points ?? 0),
-    totalPoints: Number(totalRow?.total_points ?? 0),
-    weeklyPoints: Number(weeklyRow?.weekly_points ?? 0),
+    totalPoints,
+    weeklyPoints: totalPoints,
     ownedStickerIds: (owned.results ?? []).map((row) => row.sticker_id),
     leaderboard: await getLeaderboard(env, childId),
   };
 }
 
-async function getLeaderboard(env, currentChildId) {
-  const weekStart = getWeekStart();
+export async function getLeaderboard(env, currentChildId) {
   const rows = await env.DB.prepare(`
     SELECT c.id, c.display_name, c.avatar_id,
-           COALESCE(SUM(CASE WHEN p.delta > 0 AND p.created_at >= ? THEN p.delta ELSE 0 END), 0) AS weekly_points,
            COALESCE(SUM(CASE WHEN p.delta > 0 THEN p.delta ELSE 0 END), 0) AS total_points
     FROM children c
     LEFT JOIN point_transactions p ON p.child_id = c.id
     GROUP BY c.id
-    ORDER BY weekly_points DESC, total_points DESC, c.created_at ASC
-  `).bind(weekStart).all();
+    ORDER BY total_points DESC, c.created_at ASC
+  `).all();
 
   const ranked = (rows.results ?? []).map((row, index) => ({
     rank: index + 1,
     name: row.display_name,
     avatarId: row.avatar_id,
-    weeklyPoints: Number(row.weekly_points ?? 0),
+    totalPoints: Number(row.total_points ?? 0),
+    weeklyPoints: Number(row.total_points ?? 0),
     isCurrentChild: row.id === currentChildId,
   }));
   const current = ranked.find((row) => row.isCurrentChild);
@@ -422,15 +417,6 @@ function toBase64Url(bytes) {
   let binary = '';
   bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function getWeekStart() {
-  const now = new Date();
-  const day = now.getUTCDay();
-  const diff = day === 0 ? 6 : day - 1;
-  now.setUTCDate(now.getUTCDate() - diff);
-  now.setUTCHours(0, 0, 0, 0);
-  return now.toISOString();
 }
 
 function isPageRequest(request) {
